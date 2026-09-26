@@ -14,6 +14,7 @@ struct ContentView: View {
     let onResultsChanged: (Bool) -> Void
 
     @State private var query = ""
+    @State private var selectedIndex = 0
 
     @FocusState private var searchFieldFocused: Bool
 
@@ -51,7 +52,6 @@ struct ContentView: View {
         }
 
         return results.filter {
-
             $0.title.localizedCaseInsensitiveContains(query)
             ||
             $0.subtitle.localizedCaseInsensitiveContains(query)
@@ -114,25 +114,50 @@ struct ContentView: View {
                 Divider()
                     .opacity(0.4)
 
-                ScrollView {
+                ScrollViewReader { proxy in
 
-                    VStack(spacing: 2) {
+                    ScrollView {
 
-                        ForEach(
-                            filteredResults
-                        ) { result in
+                        VStack(spacing: 2) {
 
-                            SearchResultRow(
-                                result: result
+                            ForEach(
+                                Array(
+                                    filteredResults.enumerated()
+                                ),
+                                id: \.element.id
+                            ) { index, result in
+
+                                SearchResultRow(
+                                    result: result,
+                                    isSelected:
+                                        index == selectedIndex
+                                )
+                                .id(index)
+                                .onTapGesture {
+
+                                    selectedIndex = index
+                                }
+                            }
+                        }
+                        .padding(10)
+                    }
+                    .onChange(of: selectedIndex) {
+
+                        withAnimation(
+                            .easeInOut(duration: 0.12)
+                        ) {
+
+                            proxy.scrollTo(
+                                selectedIndex,
+                                anchor: .center
                             )
                         }
                     }
-                    .padding(10)
                 }
             }
         }
 
-        // Keep search bar pinned to the top.
+        // Keep the search bar pinned to the top.
         .frame(
             maxWidth: .infinity,
             maxHeight: .infinity,
@@ -167,9 +192,43 @@ struct ContentView: View {
             y: 10
         )
 
-        // MARK: - Results Changed
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: .searchMoveSelectionUp
+            )
+        ) { _ in
 
-        .onChange(of: filteredResults.count) {
+            guard !filteredResults.isEmpty else {
+                 return
+             }
+
+             if selectedIndex > 0 {
+                 selectedIndex -= 1
+             }
+        }
+
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: .searchMoveSelectionDown
+            )
+        ) { _ in
+
+            guard !filteredResults.isEmpty else {
+                  return
+              }
+
+              if selectedIndex < filteredResults.count - 1 {
+                  selectedIndex += 1
+              }
+        }
+
+        // MARK: - Query Changed
+
+        .onChange(of: query) {
+
+            // Whenever the search changes,
+            // start at the first result.
+            selectedIndex = 0
 
             onResultsChanged(
                 !filteredResults.isEmpty
@@ -184,13 +243,10 @@ struct ContentView: View {
             )
         ) { _ in
 
-            // Restore focus to the search field.
             searchFieldFocused = true
 
-            // Recalculate the window state.
-            //
-            // This is important if there was a query
-            // before the window was hidden.
+            selectedIndex = 0
+
             onResultsChanged(
                 !filteredResults.isEmpty
             )
@@ -200,6 +256,8 @@ struct ContentView: View {
 
             searchFieldFocused = true
 
+            selectedIndex = 0
+
             onResultsChanged(
                 !filteredResults.isEmpty
             )
@@ -207,9 +265,12 @@ struct ContentView: View {
     }
 }
 
+// MARK: - Result Row
+
 struct SearchResultRow: View {
 
     let result: SearchResult
+    let isSelected: Bool
 
     var body: some View {
 
@@ -259,6 +320,21 @@ struct SearchResultRow: View {
         .padding(
             .vertical,
             8
+        )
+        .background(
+            RoundedRectangle(
+                cornerRadius: 10
+            )
+            .fill(
+                isSelected
+                ? Color.accentColor.opacity(0.18)
+                : Color.clear
+            )
+        )
+        .contentShape(
+            RoundedRectangle(
+                cornerRadius: 10
+            )
         )
     }
 }

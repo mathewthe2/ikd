@@ -1,17 +1,6 @@
 import Cocoa
 import SwiftUI
 
-class SearchWindow: NSWindow {
-
-    override var canBecomeKey: Bool {
-        true
-    }
-
-    override var canBecomeMain: Bool {
-        true
-    }
-}
-
 class AppDelegate: NSObject, NSApplicationDelegate {
 
     var window: SearchWindow!
@@ -22,19 +11,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let expandedHeight: CGFloat = 420
     private let windowWidth: CGFloat = 680
 
+    private var keyboardMonitor: Any?
+
+    // MARK: - Application
+
     func applicationDidFinishLaunching(
         _ notification: Notification
     ) {
 
         createWindow()
 
-        // Hide whenever our app loses focus to another app.
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(handleApplicationDidResignActive),
+            selector: #selector(
+                handleApplicationDidResignActive
+            ),
             name: NSApplication.didResignActiveNotification,
             object: NSApp
         )
+
+        installKeyboardMonitor()
 
         shortcut.onShortcut = { [weak self] in
             self?.toggleWindow()
@@ -49,7 +45,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let contentView = ContentView(
             onResultsChanged: { [weak self] hasResults in
-                self?.updateWindowSize(
+
+                guard let self else {
+                    return
+                }
+
+                self.window?.hasResults = hasResults
+
+                self.updateWindowSize(
                     hasResults: hasResults
                 )
             }
@@ -72,7 +75,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.isOpaque = false
         window.backgroundColor = .clear
 
-        // Allow dragging the window by its background.
         window.isMovableByWindowBackground = true
 
         window.level = .floating
@@ -92,6 +94,91 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         positionWindowInitially()
 
         window.orderOut(nil)
+    }
+
+    // MARK: - Keyboard Monitor
+
+    private func installKeyboardMonitor() {
+
+        keyboardMonitor =
+            NSEvent.addLocalMonitorForEvents(
+                matching: .keyDown
+            ) { [weak self] event in
+
+                guard let self else {
+                    return event
+                }
+
+                guard let window = self.window else {
+                    return event
+                }
+
+                // Only intercept keys when our search window
+                // is the active/key window.
+                guard window.isKeyWindow else {
+                    return event
+                }
+
+                // Only intercept plain arrow keys.
+                //
+                // Command/Option/Control + arrows should
+                // remain available to AppKit.
+
+                let modifiers =
+                    event.modifierFlags.intersection([
+                        .command,
+                        .control,
+                        .option
+                    ])
+
+                guard modifiers.isEmpty else {
+                    return event
+                }
+
+                // -----------------------------------------
+                // UP
+                // -----------------------------------------
+
+                if event.keyCode == 126 {
+
+                    guard window.hasResults else {
+                        return event
+                    }
+
+                    window.hideCaret()
+
+                    NotificationCenter.default.post(
+                        name: .searchMoveSelectionUp,
+                        object: nil
+                    )
+
+                    // Returning nil means the NSTextView
+                    // never receives the arrow key.
+                    return nil
+                }
+
+                // -----------------------------------------
+                // DOWN
+                // -----------------------------------------
+
+                if event.keyCode == 125 {
+
+                    guard window.hasResults else {
+                        return event
+                    }
+
+                    window.hideCaret()
+
+                    NotificationCenter.default.post(
+                        name: .searchMoveSelectionDown,
+                        object: nil
+                    )
+
+                    return nil
+                }
+
+                return event
+            }
     }
 
     // MARK: - Initial Position
@@ -137,14 +224,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showWindow() {
 
-        // Don't reposition the window.
-        // The user's last dragged position is preserved.
+        NSApp.activate(
+            ignoringOtherApps: true
+        )
 
-        NSApp.activate()
-
-        // makeKeyAndOrderFront both shows the window
-        // and makes it the key window.
         window.makeKeyAndOrderFront(nil)
+
+        window.restoreSearchCaret()
 
         window.alphaValue = 0
 
@@ -177,8 +263,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             },
             completionHandler: {
 
-                // Do not reset the frame.
-                // This preserves the user's dragged position.
+                self.window.restoreSearchCaret()
 
                 self.window.orderOut(nil)
             }
@@ -198,13 +283,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hideWindow()
     }
 
-    // MARK: - Results / Resize
+    // MARK: - Window Size
 
     private func updateWindowSize(
         hasResults: Bool
     ) {
 
-        let targetHeight = hasResults
+        let targetHeight =
+            hasResults
             ? expandedHeight
             : compactHeight
 
@@ -224,16 +310,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let currentFrame = window.frame
-
-        // Keep the top edge exactly where it is.
-        //
-        // Current top:
-        //     currentFrame.maxY
-        //
-        // New bottom:
-        //     top - newHeight
-        //
-        // X never changes.
 
         let top = currentFrame.maxY
 
@@ -279,6 +355,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     ) {
 
         shortcut.unregister()
+
+        if let keyboardMonitor {
+            NSEvent.removeMonitor(keyboardMonitor)
+        }
 
         NotificationCenter.default.removeObserver(
             self,
