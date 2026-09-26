@@ -1,0 +1,14 @@
+# Xcode user data
+*.xcuserdata
+*.mode1v3
+*.mode2v3
+*.storyboardc
+*.xccheckout
+
+# Build artifacts
+build/
+DerivedData/
+
+# Swift Package Manager
+.build/
+.swiftpm/
