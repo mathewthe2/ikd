@@ -22,14 +22,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let expandedHeight: CGFloat = 420
     private let windowWidth: CGFloat = 680
 
-    // We only position the window automatically once.
-    private var hasInitialPosition = false
-
     func applicationDidFinishLaunching(
         _ notification: Notification
     ) {
 
         createWindow()
+
+        // Hide whenever our app loses focus to another app.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleApplicationDidResignActive),
+            name: NSApplication.didResignActiveNotification,
+            object: NSApp
+        )
 
         shortcut.onShortcut = { [weak self] in
             self?.toggleWindow()
@@ -67,7 +72,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.isOpaque = false
         window.backgroundColor = .clear
 
-        // Allows dragging the window by its background.
+        // Allow dragging the window by its background.
         window.isMovableByWindowBackground = true
 
         window.level = .floating
@@ -84,8 +89,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             rootView: contentView
         )
 
-        // Only position the window automatically
-        // on the very first launch.
         positionWindowInitially()
 
         window.orderOut(nil)
@@ -119,8 +122,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             ),
             display: false
         )
-
-        hasInitialPosition = true
     }
 
     // MARK: - Show / Hide
@@ -136,27 +137,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showWindow() {
 
-        // IMPORTANT:
-        //
-        // Do NOT call positionWindow() here.
-        //
-        // The window already knows where the user dragged it.
-        // We only make sure it starts in its compact state.
+        // Don't reposition the window.
+        // The user's last dragged position is preserved.
 
-        resizeWindow(
-            to: compactHeight,
-            animated: false
-        )
+        NSApp.activate()
 
-        NSApp.activate(
-            ignoringOtherApps: true
-        )
+        // makeKeyAndOrderFront both shows the window
+        // and makes it the key window.
+        window.makeKeyAndOrderFront(nil)
 
         window.alphaValue = 0
-
-        window.orderFrontRegardless()
-
-        window.makeKey()
 
         NSAnimationContext.runAnimationGroup { context in
 
@@ -187,16 +177,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             },
             completionHandler: {
 
-                // Keep the window exactly where the user
-                // left it.
-                //
-                // We don't call positionWindow().
-                // We don't reset the X coordinate.
-                // We don't reset the Y coordinate.
+                // Do not reset the frame.
+                // This preserves the user's dragged position.
 
                 self.window.orderOut(nil)
             }
         )
+    }
+
+    // MARK: - Application Focus
+
+    @objc private func handleApplicationDidResignActive(
+        _ notification: Notification
+    ) {
+
+        guard window.isVisible else {
+            return
+        }
+
+        hideWindow()
     }
 
     // MARK: - Results / Resize
@@ -226,14 +225,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let currentFrame = window.frame
 
-        // Keep the TOP edge exactly where it is.
+        // Keep the top edge exactly where it is.
         //
-        // NSWindow coordinates use the bottom-left as the origin,
-        // so when the height changes we calculate a new Y such that:
+        // Current top:
+        //     currentFrame.maxY
         //
-        // newY + newHeight = oldY + oldHeight
+        // New bottom:
+        //     top - newHeight
         //
-        // This means the top stays fixed and only the bottom moves.
+        // X never changes.
 
         let top = currentFrame.maxY
 
@@ -272,10 +272,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Cleanup
+
     func applicationWillTerminate(
         _ notification: Notification
     ) {
 
         shortcut.unregister()
+
+        NotificationCenter.default.removeObserver(
+            self,
+            name: NSApplication.didResignActiveNotification,
+            object: NSApp
+        )
     }
 }

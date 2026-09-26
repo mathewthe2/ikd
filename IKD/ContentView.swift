@@ -15,6 +15,8 @@ struct ContentView: View {
 
     @State private var query = ""
 
+    @FocusState private var searchFieldFocused: Bool
+
     private let results = [
 
         SearchResult(
@@ -81,6 +83,9 @@ struct ContentView: View {
                 )
                 .textFieldStyle(.plain)
                 .font(.system(size: 21))
+                .focused(
+                    $searchFieldFocused
+                )
 
                 if !query.isEmpty {
 
@@ -127,8 +132,7 @@ struct ContentView: View {
             }
         }
 
-        // Keep the entire content pinned to the
-        // top of the window.
+        // Keep search bar pinned to the top.
         .frame(
             maxWidth: .infinity,
             maxHeight: .infinity,
@@ -163,9 +167,38 @@ struct ContentView: View {
             y: 10
         )
 
-        // Tell AppDelegate whether there are
-        // ACTUAL search results.
+        // MARK: - Results Changed
+
         .onChange(of: filteredResults.count) {
+
+            onResultsChanged(
+                !filteredResults.isEmpty
+            )
+        }
+
+        // MARK: - App Became Active
+
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: NSApplication.didBecomeActiveNotification
+            )
+        ) { _ in
+
+            // Restore focus to the search field.
+            searchFieldFocused = true
+
+            // Recalculate the window state.
+            //
+            // This is important if there was a query
+            // before the window was hidden.
+            onResultsChanged(
+                !filteredResults.isEmpty
+            )
+        }
+
+        .onAppear {
+
+            searchFieldFocused = true
 
             onResultsChanged(
                 !filteredResults.isEmpty
