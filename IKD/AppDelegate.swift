@@ -74,6 +74,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         window.isOpaque = false
         window.backgroundColor = .clear
+        window.hasShadow = false
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        
+        let hostingView = NSHostingView(rootView: contentView)
+
+        hostingView.wantsLayer = true
+        hostingView.layer?.backgroundColor = NSColor.clear.cgColor
+
+        window.contentView = hostingView
 
         window.isMovableByWindowBackground = true
 
@@ -84,7 +94,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .fullScreenAuxiliary
         ]
 
-        window.hasShadow = true
         window.isReleasedWhenClosed = false
 
         window.contentView = NSHostingView(
@@ -221,12 +230,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             showWindow()
         }
     }
-
+    
     private func showWindow() {
 
-        NSApp.activate(
-            ignoringOtherApps: true
-        )
+        NSApp.activate(ignoringOtherApps: true)
 
         window.makeKeyAndOrderFront(nil)
 
@@ -237,13 +244,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSAnimationContext.runAnimationGroup { context in
 
             context.duration = 0.18
-
             context.timingFunction =
-                CAMediaTimingFunction(
-                    name: .easeOut
-                )
+                CAMediaTimingFunction(name: .easeOut)
 
             window.animator().alphaValue = 1
+        }
+
+        // SwiftUI has to finish creating the
+        // NSTextField before AppKit can focus it.
+        DispatchQueue.main.async { [weak self] in
+
+            guard let self else {
+                return
+            }
+
+            self.focusSearchField()
         }
     }
 
@@ -345,6 +360,40 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 newFrame,
                 display: true
             )
+        }
+    }
+    
+    private func focusSearchField() {
+
+        guard let contentView = window.contentView else {
+            return
+        }
+
+        func findTextField(
+            in view: NSView
+        ) -> NSTextField? {
+
+            if let textField = view as? NSTextField {
+                return textField
+            }
+
+            for subview in view.subviews {
+
+                if let textField = findTextField(
+                    in: subview
+                ) {
+                    return textField
+                }
+            }
+
+            return nil
+        }
+
+        if let textField = findTextField(
+            in: contentView
+        ) {
+
+            window.makeFirstResponder(textField)
         }
     }
 

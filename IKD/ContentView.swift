@@ -177,20 +177,6 @@ struct ContentView: View {
                 cornerRadius: 18
             )
         )
-        .overlay(
-            RoundedRectangle(
-                cornerRadius: 18
-            )
-            .stroke(
-                Color.white.opacity(0.12),
-                lineWidth: 1
-            )
-        )
-        .shadow(
-            color: .black.opacity(0.25),
-            radius: 30,
-            y: 10
-        )
 
         .onReceive(
             NotificationCenter.default.publisher(
